@@ -111,6 +111,8 @@
     <module>external/kafka-0-8-assembly</module>
     <module>external/kafka-0-10</module>
     <module>external/kafka-0-10-assembly</module>
+    <module>imageLib</module>
+    <!--<module>dataReadSave</module>-->
   </modules>
 
   <properties>
