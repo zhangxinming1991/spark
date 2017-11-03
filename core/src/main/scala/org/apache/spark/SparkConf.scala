@@ -107,6 +107,10 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
 
   /** Set a name for your application. Shown in the Spark web UI. */
   def setAppName(name: String): SparkConf = {
+    //scalastyle:off
+    println("***modify by simon***")
+    // scalastyle:on
+
     set("spark.app.name", name)
   }
 
