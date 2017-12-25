@@ -19,7 +19,9 @@ package org.apache.spark.sql.execution.streaming
 
 import java.util.concurrent.TimeUnit
 
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.sources.v2.reader.Offset
 import org.apache.spark.sql.streaming.{StreamingQueryException, StreamTest}
 import org.apache.spark.util.ManualClock
 
@@ -178,5 +180,16 @@ class RateSourceSuite extends StreamTest {
 
     testIllegalOptionValue("rowsPerSecond", "-1", Seq("-1", "rowsPerSecond", "positive"))
     testIllegalOptionValue("numPartitions", "-1", Seq("-1", "numPartitions", "positive"))
+  }
+
+  test("user-specified schema given") {
+    val exception = intercept[AnalysisException] {
+      spark.readStream
+        .format("rate")
+        .schema(spark.range(1).schema)
+        .load()
+    }
+    assert(exception.getMessage.contains(
+      "rate source does not support a user-specified schema"))
   }
 }

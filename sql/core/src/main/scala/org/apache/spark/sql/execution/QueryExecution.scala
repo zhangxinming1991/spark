@@ -117,7 +117,7 @@ class QueryExecution(val sparkSession: SparkSession, val logical: LogicalPlan) {
    * `SparkSQLDriver` for CLI applications.
    */
   def hiveResultString(): Seq[String] = executedPlan match {
-    case ExecutedCommandExec(desc: DescribeTableCommand, _) =>
+    case ExecutedCommandExec(desc: DescribeTableCommand) =>
       // If it is a describe command for a Hive table, we want to have the output format
       // be similar with Hive.
       desc.run(sparkSession).map {
@@ -128,7 +128,7 @@ class QueryExecution(val sparkSession: SparkSession, val logical: LogicalPlan) {
             .mkString("\t")
       }
     // SHOW TABLES in Hive only output table names, while ours output database, table name, isTemp.
-    case command @ ExecutedCommandExec(s: ShowTablesCommand, _) if !s.isExtended =>
+    case command @ ExecutedCommandExec(s: ShowTablesCommand) if !s.isExtended =>
       command.executeCollect().map(_.getString(1))
     case other =>
       val result: Seq[Seq[Any]] = other.executeCollectPublic().map(_.toSeq).toSeq
@@ -155,7 +155,7 @@ class QueryExecution(val sparkSession: SparkSession, val logical: LogicalPlan) {
     def toHiveStructString(a: (Any, DataType)): String = a match {
       case (struct: Row, StructType(fields)) =>
         struct.toSeq.zip(fields).map {
-          case (v, t) => s""""${t.name}":${toHiveStructString(v, t.dataType)}"""
+          case (v, t) => s""""${t.name}":${toHiveStructString((v, t.dataType))}"""
         }.mkString("{", ",", "}")
       case (seq: Seq[_], ArrayType(typ, _)) =>
         seq.map(v => (v, typ)).map(toHiveStructString).mkString("[", ",", "]")
@@ -173,7 +173,7 @@ class QueryExecution(val sparkSession: SparkSession, val logical: LogicalPlan) {
     a match {
       case (struct: Row, StructType(fields)) =>
         struct.toSeq.zip(fields).map {
-          case (v, t) => s""""${t.name}":${toHiveStructString(v, t.dataType)}"""
+          case (v, t) => s""""${t.name}":${toHiveStructString((v, t.dataType))}"""
         }.mkString("{", ",", "}")
       case (seq: Seq[_], ArrayType(typ, _)) =>
         seq.map(v => (v, typ)).map(toHiveStructString).mkString("[", ",", "]")
@@ -194,13 +194,13 @@ class QueryExecution(val sparkSession: SparkSession, val logical: LogicalPlan) {
     }
   }
 
-  def simpleString: String = {
+  def simpleString: String = withRedaction {
     s"""== Physical Plan ==
        |${stringOrError(executedPlan.treeString(verbose = false))}
       """.stripMargin.trim
   }
 
-  override def toString: String = {
+  override def toString: String = withRedaction {
     def output = Utils.truncatedString(
       analyzed.output.map(o => s"${o.name}: ${o.dataType.simpleString}"), ", ")
     val analyzedPlan = Seq(
@@ -219,9 +219,9 @@ class QueryExecution(val sparkSession: SparkSession, val logical: LogicalPlan) {
     """.stripMargin.trim
   }
 
-  def stringWithStats: String = {
+  def stringWithStats: String = withRedaction {
     // trigger to compute stats for logical plans
-    optimizedPlan.stats(sparkSession.sessionState.conf)
+    optimizedPlan.stats
 
     // only show optimized logical plan and physical plan
     s"""== Optimized Logical Plan ==
@@ -229,6 +229,13 @@ class QueryExecution(val sparkSession: SparkSession, val logical: LogicalPlan) {
         |== Physical Plan ==
         |${stringOrError(executedPlan.treeString(verbose = true))}
     """.stripMargin.trim
+  }
+
+  /**
+   * Redact the sensitive information in the given string.
+   */
+  private def withRedaction(message: String): String = {
+    Utils.redact(sparkSession.sessionState.conf.stringRedationPattern, message)
   }
 
   /** A special namespace for commands that can be used to debug query execution. */
@@ -244,6 +251,15 @@ class QueryExecution(val sparkSession: SparkSession, val logical: LogicalPlan) {
       // scalastyle:off println
       println(org.apache.spark.sql.execution.debug.codegenString(executedPlan))
       // scalastyle:on println
+    }
+
+    /**
+     * Get WholeStageCodegenExec subtrees and the codegen in a query plan
+     *
+     * @return Sequence of WholeStageCodegen subtrees and corresponding codegen
+     */
+    def codegenToSeq(): Seq[(String, String)] = {
+      org.apache.spark.sql.execution.debug.codegenStringSeq(executedPlan)
     }
   }
 }
